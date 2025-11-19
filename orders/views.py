@@ -6,17 +6,16 @@ from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.generics import ListAPIView # New import
+from rest_framework.generics import ListAPIView
 
 from .models import Order, OrderItem
-# Note: Using AddressSerializer, OrderSerializer from the same directory
-from .serializers import AddressSerializer, OrderSerializer 
+from .serializers import AddressSerializer, OrderSerializer
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
 # ======================================================================
-# CREATE ORDER (COD / STRIPE) - Unchanged
+# CREATE ORDER (COD / STRIPE)
 # ======================================================================
 class CreateOrderAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -26,8 +25,6 @@ class CreateOrderAPIView(APIView):
         cart = request.data.get("cart")
         address_data = request.data.get("address")
         payment_method = request.data.get("payment_method", "").lower()
-
-        # ... (Validation and Cart/Address saving logic) ...
 
         # Validate cart
         if not cart or not isinstance(cart, list):
@@ -48,7 +45,7 @@ class CreateOrderAPIView(APIView):
             total_amount = sum(
                 float(i["price"]) * int(i["quantity"]) for i in cart
             )
-        except (KeyError, ValueError):
+        except Exception:
             return Response({"error": "Invalid cart format"}, status=400)
 
         # Create Order
@@ -69,16 +66,21 @@ class CreateOrderAPIView(APIView):
                 price=float(item["price"]),
             )
 
-        # COD
+        # -------- COD LOGIC --------
         if payment_method == "cod":
-            order.status = "processing"
+            order.status = "processing"  # COD bypasses pending
             order.save()
             return Response(
-                {"message": "COD order placed", "order_id": order.id},
+                {
+                    "message": "COD order placed",
+                    "order_id": order.id,
+                    "payment_method": "cod",
+                    "status": "processing"
+                },
                 status=200,
             )
 
-        # STRIPE
+        # -------- STRIPE LOGIC --------
         try:
             session = stripe.checkout.Session.create(
                 mode="payment",
@@ -109,7 +111,7 @@ class CreateOrderAPIView(APIView):
 
 
 # ======================================================================
-# VERIFY PAYMENT — FALLBACK FIX - Unchanged
+# VERIFY PAYMENT (STRIPE + COD SUPPORT)
 # ======================================================================
 class VerifyPaymentAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -119,6 +121,7 @@ class VerifyPaymentAPIView(APIView):
         if not session_id:
             return Response({"error": "Missing session_id"}, status=400)
 
+        # Retrieve Stripe session
         try:
             session = stripe.checkout.Session.retrieve(session_id)
         except Exception:
@@ -133,7 +136,15 @@ class VerifyPaymentAPIView(APIView):
         except Order.DoesNotExist:
             return Response({"error": "Order not found"}, status=404)
 
-        # FIX: Check Stripe status and update database if successful
+        # -------- COD LOGIC --------
+        if order.payment_method == "cod":
+            return Response({
+                "order_id": order.id,
+                "status": order.status,
+                "payment_verified": True
+            })
+
+        # -------- STRIPE LOGIC --------
         if session.get("payment_status") == "paid" and order.status == "pending":
             order.status = "paid"
             order.save()
@@ -146,13 +157,12 @@ class VerifyPaymentAPIView(APIView):
 
 
 # ======================================================================
-# STRIPE WEBHOOK - Unchanged
+# STRIPE WEBHOOK
 # ======================================================================
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookAPIView(APIView):
 
     def post(self, request):
-        # ... (Webhook processing logic - unchanged)
         payload = request.body
         signature = request.headers.get("stripe-signature")
 
@@ -162,10 +172,8 @@ class StripeWebhookAPIView(APIView):
                 signature,
                 settings.STRIPE_WEBHOOK_SECRET
             )
-        except stripe.error.SignatureVerificationError:
-            return Response({"error": "Invalid signature"}, status=400)
         except Exception:
-            return Response({"error": "Invalid payload"}, status=400)
+            return Response({"error": "Invalid signature or payload"}, status=400)
 
         if event["type"] == "checkout.session.completed":
             session = event["data"]["object"]
@@ -178,14 +186,13 @@ class StripeWebhookAPIView(APIView):
 
 
 # ======================================================================
-# FETCH USER ORDERS (NEW)
+# FETCH ORDERS FOR USER
 # ======================================================================
 class UserOrderListAPIView(ListAPIView):
-    """
-    API view to list all orders for the authenticated user.
-    """
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user).order_by('-created_at')
+        return Order.objects.filter(
+            user=self.request.user
+        ).order_by("-created_at")
