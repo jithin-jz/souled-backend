@@ -1,10 +1,12 @@
 import os
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 from rest_framework import permissions, status
 from rest_framework.views import APIView
@@ -19,32 +21,37 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 
 def set_jwt_cookies(response, refresh: RefreshToken):
-    """Attach access & refresh JWT tokens as HttpOnly cookies."""
+    """
+    Attach access & refresh JWT tokens as HttpOnly cookies.
+    Uses COOKIE_SECURE / COOKIE_SAMESITE from settings.
+    """
     access_token = str(refresh.access_token)
     refresh_token = str(refresh)
 
-    secure = getattr(settings, "SECURE_COOKIES", False)
+    secure = getattr(settings, "COOKIE_SECURE", False)
+    samesite = getattr(settings, "COOKIE_SAMESITE", "Lax")
 
-    # Access token: expires 1 hour
+    cookie_args = {
+        "httponly": True,
+        "secure": secure,
+        "samesite": samesite,
+        "path": "/",
+    }
+
+    # Access token, 1 hour
     response.set_cookie(
         AUTH_COOKIE_KEY,
         access_token,
         max_age=3600,
-        httponly=True,
-        secure=secure,
-        samesite="Lax",
-        path="/",
+        **cookie_args,
     )
 
-    # Refresh token: expires 7 days
+    # Refresh token, 7 days
     response.set_cookie(
         REFRESH_COOKIE_KEY,
         refresh_token,
         max_age=3600 * 24 * 7,
-        httponly=True,
-        secure=secure,
-        samesite="Lax",
-        path="/",
+        **cookie_args,
     )
 
 
@@ -132,9 +139,8 @@ class GoogleLoginView(APIView):
 @method_decorator(csrf_exempt, name="dispatch")
 class LogoutView(APIView):
     """
-    User logout does not require auth.
-    Deletes cookies regardless of access token state.
-    Prevents CSRF issues by disabling protection for this view only.
+    Logout: clear cookies regardless of auth state.
+    CSRF exempt so it never fails on 403.
     """
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
@@ -147,6 +153,9 @@ class LogoutView(APIView):
 
 
 class RefreshView(APIView):
+    """
+    Reads refresh cookie and issues a new access cookie.
+    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -158,15 +167,17 @@ class RefreshView(APIView):
             refresh = RefreshToken(refresh_token)
             new_access = refresh.access_token
 
-            response = Response({"detail": "Access refreshed"}, status=200)
+            secure = getattr(settings, "COOKIE_SECURE", False)
+            samesite = getattr(settings, "COOKIE_SAMESITE", "Lax")
 
+            response = Response({"detail": "Access refreshed"}, status=200)
             response.set_cookie(
                 AUTH_COOKIE_KEY,
                 str(new_access),
                 max_age=3600,
                 httponly=True,
-                secure=getattr(settings, "SECURE_COOKIES", False),
-                samesite="Lax",
+                secure=secure,
+                samesite=samesite,
                 path="/",
             )
             return response
