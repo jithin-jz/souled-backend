@@ -90,6 +90,11 @@ DATABASES = {
 
 AUTH_USER_MODEL = "accounts.User"
 
+# Authentication backends - required for email-based authentication
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+]
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -112,6 +117,11 @@ SIMPLE_JWT = {
     "AUTH_COOKIE": "access",
     "AUTH_COOKIE_REFRESH": "refresh",
 }
+
+# Cookie security settings for JWT authentication
+# These are referenced in accounts/views.py set_jwt_cookies()
+COOKIE_SECURE = False if DEBUG else True
+COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
 
 # --- CORS + CSRF ---
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")

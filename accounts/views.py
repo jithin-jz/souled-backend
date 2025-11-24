@@ -55,7 +55,12 @@ def set_jwt_cookies(response, refresh: RefreshToken):
     )
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class RegisterView(APIView):
+    """
+    User registration - CSRF exempt since unauthenticated users
+    don't have CSRF tokens yet.
+    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -74,7 +79,12 @@ class RegisterView(APIView):
         return response
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class LoginView(APIView):
+    """
+    User login - CSRF exempt since unauthenticated users
+    don't have CSRF tokens yet.
+    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -93,7 +103,12 @@ class LoginView(APIView):
         return response
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class GoogleLoginView(APIView):
+    """
+    Google OAuth login - CSRF exempt since the id_token verification
+    provides sufficient security.
+    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
