@@ -81,6 +81,14 @@ class CreateOrderAPIView(APIView):
                 price=float(item["price"]),
             )
 
+        # Clear user's cart after order is created
+        from cart.models import Cart
+        try:
+            user_cart = Cart.objects.get(user=user)
+            user_cart.items.all().delete()  # Delete all cart items
+        except Cart.DoesNotExist:
+            pass  # No cart to clear
+
         # -------- COD LOGIC --------
         if payment_method == "cod":
             order.status = "processing"  # COD bypasses pending
