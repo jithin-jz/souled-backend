@@ -25,7 +25,7 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS = [
-     'django_daisy',
+    'django_daisy',
     'django.contrib.humanize',  # Required
     
     "django.contrib.admin",
