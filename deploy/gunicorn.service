@@ -1,0 +1,23 @@
+[Unit]
+Description=Gunicorn daemon for Souled Django Backend
+After=network.target
+
+[Service]
+Type=notify
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/souled-backend
+Environment="PATH=/home/ubuntu/souled-backend/venv/bin"
+EnvironmentFile=/home/ubuntu/souled-backend/.env
+ExecStart=/home/ubuntu/souled-backend/venv/bin/gunicorn \
+          --config gunicorn_config.py \
+          store.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
