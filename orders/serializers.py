@@ -81,8 +81,9 @@ class OrderItemSerializer(serializers.ModelSerializer):
         return obj.product.name if obj.product else "Product Unavailable"
 
     def get_image(self, obj):
-        # Product.image is a URLField, so we just return it directly
-        return obj.product.image if obj.product else None
+        if obj.product and obj.product.image:
+            return obj.product.image.url
+        return None
 
     def get_category(self, obj):
         return obj.product.category if obj.product else "N/A"

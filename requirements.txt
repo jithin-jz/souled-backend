@@ -8,6 +8,8 @@ Django==5.2.8
 django-cloudinary-storage==0.3.0
 django-cors-headers==4.9.0
 django-daisy==2.0.4
+django-filter==24.3
+drf-spectacular==0.28.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 google-auth==2.41.1
