@@ -18,11 +18,18 @@ if not SECRET_KEY:
 
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
+# ALLOWED_HOSTS configuration
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if host.strip()
 ]
+
+# Add DuckDNS domain and EC2 IP for production
+ALLOWED_HOSTS.extend([
+    "souled-api.duckdns.org",
+    "18.60.156.231",
+])
 
 INSTALLED_APPS = [
     'django_daisy',
@@ -129,6 +136,10 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_COOKIE": "access",
     "AUTH_COOKIE_REFRESH": "refresh",
+    "AUTH_COOKIE_SECURE": not DEBUG,  # True in production (HTTPS only)
+    "AUTH_COOKIE_HTTP_ONLY": True,  # Prevent JavaScript access
+    "AUTH_COOKIE_PATH": "/",
+    "AUTH_COOKIE_SAMESITE": "None" if not DEBUG else "Lax",  # Allow cross-origin
 }
 
 # ======================
@@ -145,8 +156,27 @@ CORS_ALLOW_CREDENTIALS = True
 cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
 
+# Add production frontend URL
+CORS_ALLOWED_ORIGINS.extend([
+    "https://souled-frontend.vercel.app",
+])
+
 csrf_origins = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins.split(",") if origin.strip()]
+
+# Add DuckDNS domain and frontend URL
+CSRF_TRUSTED_ORIGINS.extend([
+    "https://souled-api.duckdns.org",
+    "http://souled-api.duckdns.org",
+    "https://souled-frontend.vercel.app",
+])
+
+# Trust X-Forwarded-Proto header from Nginx for HTTPS detection
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Cookie settings for JWT authentication
+COOKIE_SECURE = not DEBUG  # True in production (HTTPS only)
+COOKIE_SAMESITE = "None" if not DEBUG else "Lax"  # Allow cross-origin in production
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 X_FRAME_OPTIONS = "DENY"
