@@ -46,3 +46,13 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Auto-generated
+schema.yml
+
+# Debug/test files
+reproduce_issue.py
+products.json
+
+# Cleanup script
+cleanup.ps1
