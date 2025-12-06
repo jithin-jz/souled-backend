@@ -20,4 +20,3 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_role(self, obj):
         return "admin" if obj.is_staff else "user"
-        
