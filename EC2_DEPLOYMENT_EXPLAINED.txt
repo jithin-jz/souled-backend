@@ -1,0 +1,479 @@
+================================================================================
+EC2 DEPLOYMENT ARCHITECTURE EXPLAINED
+================================================================================
+
+OVERVIEW
+--------
+Your Django backend is deployed on AWS EC2 using a production-grade 
+architecture with automated CI/CD deployment through GitHub Actions.
+
+================================================================================
+ARCHITECTURE DIAGRAM
+================================================================================
+
+User Browser
+    |
+    | HTTPS Request
+    v
+Domain DNS
+    |
+    | Routes to
+    v
+EC2 Elastic IP
+    |
+    | Port 443
+    v
+Nginx Web Server
+    |
+    | SSL Termination & Proxy Pass :8000
+    v
+Gunicorn WSGI Server
+    |
+    | Runs
+    v
+Django Application
+    |
+    +---> Supabase PostgreSQL (Queries)
+    +---> Cloudinary CDN (Stores Media)
+    +---> Stripe API (Payment Processing)
+
+GitHub Repository
+    |
+    | Push to main
+    v
+GitHub Actions
+    |
+    | SSH Deploy
+    v
+EC2 Instance
+
+================================================================================
+COMPONENT BREAKDOWN
+================================================================================
+
+1. AWS EC2 INSTANCE (The Server)
+---------------------------------
+
+What it is:
+- A virtual server running Ubuntu 22.04 LTS
+- Instance type: t2.micro (1 vCPU, 1GB RAM)
+- Free tier eligible for 12 months
+
+What it does:
+- Hosts your entire Django application
+- Runs 24/7 to serve requests
+- Has a public IP address (Elastic IP) that never changes
+
+Key Features:
+- Swap Memory: 2GB swap file added to compensate for low RAM
+- Firewall (UFW): Configured to allow only HTTP (80), HTTPS (443), and SSH (22)
+- Security Groups: AWS-level firewall rules
+
+--------------------------------------------------------------------------------
+
+2. NGINX (Reverse Proxy & Web Server)
+--------------------------------------
+
+What it is:
+- A high-performance web server and reverse proxy
+- First point of contact for all incoming requests
+
+What it does:
+
+a) SSL/TLS Termination
+   - Handles HTTPS encryption/decryption
+   - Uses Let's Encrypt free SSL certificates
+   - Automatically redirects HTTP → HTTPS
+
+b) Reverse Proxy
+   Client Request (HTTPS :443)
+       ↓
+   Nginx receives & decrypts
+       ↓
+   Forwards to Gunicorn (HTTP :8000)
+       ↓
+   Gunicorn processes request
+       ↓
+   Nginx encrypts & sends response back
+
+c) Static File Serving
+   - Serves static files (CSS, JS) directly from /staticfiles/
+   - Adds caching headers for performance
+   - Media files redirected to Cloudinary
+
+d) Security Headers
+   - X-Frame-Options: Prevents clickjacking
+   - X-Content-Type-Options: Prevents MIME sniffing
+   - Strict-Transport-Security: Enforces HTTPS
+   - X-XSS-Protection: XSS attack protection
+
+Configuration Location: deploy/nginx.conf
+
+--------------------------------------------------------------------------------
+
+3. GUNICORN (WSGI Application Server)
+--------------------------------------
+
+What it is:
+- A Python WSGI HTTP server for running Django
+- Production-grade alternative to Django's development server
+
+What it does:
+
+a) Runs Django Application
+   - Binds to 0.0.0.0:8000 (localhost only, not exposed to internet)
+   - Spawns 2 worker processes (optimized for 1GB RAM)
+   - Each worker can handle multiple requests
+
+b) Process Management
+   - Managed by systemd (Linux service manager)
+   - Auto-restarts on failure
+   - Starts automatically on server boot
+
+c) Configuration
+   # gunicorn_config.py
+   bind = "0.0.0.0:8000"        # Listen on port 8000
+   workers = 2                   # 2 worker processes
+   worker_class = "sync"         # Synchronous workers
+   timeout = 120                 # 2-minute timeout
+
+Service File: deploy/gunicorn.service
+
+How it's managed:
+   sudo systemctl start gunicorn    # Start service
+   sudo systemctl stop gunicorn     # Stop service
+   sudo systemctl restart gunicorn  # Restart service
+   sudo systemctl status gunicorn   # Check status
+
+--------------------------------------------------------------------------------
+
+4. DJANGO APPLICATION (Your Backend)
+-------------------------------------
+
+What it is:
+- Your e-commerce backend with all business logic
+- REST API endpoints for frontend
+
+What it does:
+- Handles API requests from frontend
+- Processes orders, cart, products, authentication
+- Communicates with external services
+
+Environment Configuration:
+   DEBUG=False                      # Production mode
+   ALLOWED_HOSTS=your-domain.com    # Only accept requests from domain
+   DATABASE_URL=postgresql://...    # Supabase connection
+
+--------------------------------------------------------------------------------
+
+5. SUPABASE POSTGRESQL (Database)
+----------------------------------
+
+What it is:
+- Managed PostgreSQL database (cloud-hosted)
+- Free tier: 500MB storage
+
+What it does:
+- Stores all application data (users, products, orders)
+- Hosted separately from EC2 (reduces server load)
+- Automatic backups and scaling
+
+Connection:
+   Django → SSL Connection → Supabase Cloud Database
+
+--------------------------------------------------------------------------------
+
+6. CLOUDINARY (Media Storage)
+------------------------------
+
+What it is:
+- Cloud-based media management service
+
+What it does:
+- Stores product images, user avatars
+- Serves images via CDN (fast global delivery)
+- Reduces EC2 storage usage
+
+--------------------------------------------------------------------------------
+
+7. GITHUB ACTIONS (CI/CD Pipeline)
+-----------------------------------
+
+What it is:
+- Automated deployment system
+- Triggers on every push to main branch
+
+Deployment Workflow:
+
+Developer Pushes Code
+    |
+    | Git Push
+    v
+GitHub Repository
+    |
+    | Triggers
+    v
+GitHub Actions
+    |
+    | SSH to EC2
+    v
+EC2 Instance
+    |
+    | Pull Latest Code
+    v
+Git Pull
+    |
+    | Install Dependencies
+    v
+pip install
+    |
+    | Run Migrations
+    v
+python manage.py migrate
+    |
+    | Collect Static
+    v
+collectstatic
+    |
+    | Restart Service
+    v
+systemctl restart gunicorn
+    |
+    v
+Live Application
+
+Step-by-Step Process:
+
+1. Trigger: Push to main branch
+2. Checkout: GitHub Actions checks out your code
+3. SSH Setup: Connects to EC2 using stored SSH key
+4. Deploy Commands:
+   cd /home/ubuntu/backend/souled-backend
+   git pull origin main                    # Get latest code
+   source venv/bin/activate                # Activate Python env
+   pip install -r requirements.txt         # Update dependencies
+   python manage.py migrate --noinput      # Apply DB changes
+   python manage.py collectstatic --noinput # Update static files
+   sudo systemctl restart gunicorn         # Restart app
+
+Configuration: .github/workflows/deploy.yml
+
+Required GitHub Secrets:
+- EC2_SSH_KEY: Private SSH key for EC2 access
+- EC2_HOST: EC2 public IP or domain
+- EC2_USER: ubuntu (default EC2 user)
+
+================================================================================
+REQUEST FLOW (END-TO-END)
+================================================================================
+
+Example: User Adds Product to Cart
+
+1. User → DNS: https://yourdomain.com/api/cart/add/
+2. DNS → Nginx: Routes to EC2 IP
+3. Nginx → Nginx: SSL Decryption
+4. Nginx → Gunicorn: HTTP :8000 /api/cart/add/
+5. Gunicorn → Django: Process Request
+6. Django → Django: Validate User Session
+7. Django → Supabase: INSERT INTO cart_items
+8. Supabase → Django: Success
+9. Django → Gunicorn: JSON Response
+10. Gunicorn → Nginx: HTTP Response
+11. Nginx → Nginx: SSL Encryption
+12. Nginx → User: HTTPS Response (200 OK)
+
+Timeline:
+1. 0ms: User clicks "Add to Cart" in frontend
+2. 50ms: DNS resolves domain to EC2 IP
+3. 100ms: Nginx receives HTTPS request, decrypts
+4. 150ms: Gunicorn worker picks up request
+5. 200ms: Django validates session, processes logic
+6. 250ms: Database query to Supabase
+7. 300ms: Response travels back through stack
+8. 350ms: User sees "Added to cart" confirmation
+
+================================================================================
+SECURITY LAYERS
+================================================================================
+
+1. Network Security
+   - AWS Security Groups: Firewall at AWS level
+   - UFW Firewall: Firewall at OS level
+   - SSH Key Authentication: No password login
+
+2. Application Security
+   - DEBUG=False: Hides error details
+   - ALLOWED_HOSTS: Only accepts requests from your domain
+   - CORS Configuration: Restricts frontend origins
+   - CSRF Protection: Prevents cross-site attacks
+
+3. Transport Security
+   - SSL/TLS Encryption: All traffic encrypted
+   - HSTS Headers: Forces HTTPS
+   - Secure Cookies: Session cookies only over HTTPS
+
+4. Database Security
+   - SSL Connection: Encrypted connection to Supabase
+   - Environment Variables: Credentials not in code
+   - Separate Database Server: Isolated from web server
+
+================================================================================
+RESOURCE MANAGEMENT
+================================================================================
+
+Memory Optimization (1GB RAM)
+
+Problem: t2.micro has only 1GB RAM
+
+Solutions:
+1. Swap File: 2GB virtual memory
+2. 2 Gunicorn Workers: Minimal but functional
+3. External Database: Supabase (not on EC2)
+4. External Media: Cloudinary (not on EC2)
+
+Memory Breakdown:
+   OS + System:        ~300MB
+   Nginx:              ~50MB
+   Gunicorn (2 workers): ~400MB
+   Django App:         ~200MB
+   Free/Cache:         ~50MB
+   Swap Available:     2GB
+
+================================================================================
+DEPLOYMENT PROCESS
+================================================================================
+
+Manual Deployment
+-----------------
+# SSH into EC2
+ssh -i key.pem ubuntu@your-ec2-ip
+
+# Navigate to project
+cd /home/ubuntu/backend/souled-backend
+
+# Pull latest code
+git pull origin main
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations
+python manage.py migrate
+
+# Collect static files
+python manage.py collectstatic --noinput
+
+# Restart Gunicorn
+sudo systemctl restart gunicorn
+
+# Check status
+sudo systemctl status gunicorn
+
+Automated Deployment (GitHub Actions)
+--------------------------------------
+# Just push to main branch
+git add .
+git commit -m "Update feature"
+git push origin main
+
+# GitHub Actions automatically:
+# 1. Connects to EC2
+# 2. Pulls latest code
+# 3. Installs dependencies
+# 4. Runs migrations
+# 5. Collects static files
+# 6. Restarts Gunicorn
+
+================================================================================
+MONITORING & DEBUGGING
+================================================================================
+
+View Logs
+---------
+Gunicorn Logs:
+   sudo journalctl -u gunicorn -f
+
+Nginx Access Logs:
+   sudo tail -f /var/log/nginx/souled_access.log
+
+Nginx Error Logs:
+   sudo tail -f /var/log/nginx/souled_error.log
+
+Check Service Status
+--------------------
+# Gunicorn status
+sudo systemctl status gunicorn
+
+# Nginx status
+sudo systemctl status nginx
+
+# Check if ports are listening
+sudo netstat -tulpn | grep -E ':(80|443|8000)'
+
+Common Issues
+-------------
+502 Bad Gateway
+   Cause: Gunicorn not running
+   Fix:
+      sudo systemctl restart gunicorn
+      sudo journalctl -u gunicorn -n 50
+
+Static Files Not Loading
+   Cause: Static files not collected
+   Fix:
+      source venv/bin/activate
+      python manage.py collectstatic --noinput
+      sudo systemctl restart nginx
+
+================================================================================
+COST BREAKDOWN
+================================================================================
+
+Free Tier (12 Months)
+---------------------
+- EC2 t2.micro: $0/month (750 hours/month free)
+- Supabase: $0/month (500MB database)
+- Cloudinary: $0/month (25GB storage, 25GB bandwidth)
+- Let's Encrypt SSL: $0/month (free certificates)
+
+After Free Tier
+----------------
+- EC2 t2.micro: ~$8-10/month
+- Elastic IP: $0 (if attached to running instance)
+- Data Transfer: ~$0.09/GB
+
+Total: $0/month (first year), ~$10/month (after)
+
+================================================================================
+KEY TAKEAWAYS
+================================================================================
+
+1. Nginx handles all incoming traffic and SSL
+2. Gunicorn runs your Django application
+3. Systemd keeps Gunicorn running 24/7
+4. Supabase hosts your database (separate from EC2)
+5. GitHub Actions automates deployments
+6. Let's Encrypt provides free SSL certificates
+7. Cloudinary handles media storage
+
+Flow Summary:
+   User → Nginx (SSL) → Gunicorn → Django → Supabase/Cloudinary
+                                       ↑
+                               GitHub Actions (Auto-deploy)
+
+================================================================================
+RELATED FILES
+================================================================================
+
+- Deployment Guide: AWS_EC2_DEPLOYMENT.md
+- Nginx Config: deploy/nginx.conf
+- Gunicorn Service: deploy/gunicorn.service
+- Gunicorn Config: gunicorn_config.py
+- CI/CD Workflow: .github/workflows/deploy.yml
+
+================================================================================
+END OF DOCUMENT
+================================================================================

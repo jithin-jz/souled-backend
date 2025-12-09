@@ -1,89 +1,109 @@
-from rest_framework.generics import ListAPIView, RetrieveAPIView
-from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView, DestroyAPIView
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from django.db.models import Count, Sum
+from django.db.models.functions import TruncDate
 from django.contrib.auth import get_user_model
-from panel.serializers import UserSerializer
+
+from orders.models import Order
+from products.models import Product
+
+from .serializers import (
+    AdminUserListSerializer,
+    AdminUserDetailSerializer,
+    OrderDashboardSerializer,
+    ProductMiniSerializer
+)
 
 User = get_user_model()
 
 
+# ================================
+# USER LIST
+# Lightweight, optimized for speed
+# ================================
 class AdminUserList(ListAPIView):
     queryset = User.objects.all().order_by("-id")
-    serializer_class = UserSerializer
+    serializer_class = AdminUserListSerializer
     permission_classes = [IsAdminUser]
 
 
+# ================================
+# USER DETAIL
+# Heavy, includes order history
+# ================================
 class AdminUserDetail(RetrieveAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
+    queryset = User.objects.select_related().all()
+    serializer_class = AdminUserDetailSerializer
     lookup_field = "id"
     permission_classes = [IsAdminUser]
 
 
+# ================================
+# TOGGLE USER BLOCK
+# Simple boolean flip action
+# ================================
 class AdminToggleBlockUser(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request, id):
-        try:
-            user = User.objects.get(id=id)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
-
+        user = get_object_or_404(User, id=id)
         user.is_block = not user.is_block
-        user.save()
+        user.save(update_fields=["is_block"])
+        return Response({"status": "success", "isBlock": user.is_block})
 
-        return Response({"status": "success", "isBlock": user.is_block}, status=200)
 
-
-class AdminDeleteUser(APIView):
+# ================================
+# DELETE USER
+# Uses DRF Delete mixin
+# ================================
+class AdminDeleteUser(DestroyAPIView):
+    queryset = User.objects.all()
+    lookup_field = "id"
     permission_classes = [IsAdminUser]
 
-    def delete(self, request, id):
-        try:
-            user = User.objects.get(id=id)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
-
-        user.delete()
-        return Response({"status": "deleted"}, status=200)
+    def delete(self, request, *args, **kwargs):
+        super().delete(request, *args, **kwargs)
+        return Response({"status": "deleted"})
 
 
+# ================================
+# DASHBOARD STATS
+# Counts + revenue + recent orders
+# ================================
 class DashboardStatsView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        from products.models import Product
-        from orders.models import Order
-        from django.db.models import Sum
-
         total_users = User.objects.count()
         total_products = Product.objects.count()
         total_orders = Order.objects.count()
-        
-        # Calculate total revenue from paid orders
-        revenue_data = Order.objects.filter(payment_status="paid").aggregate(
-            total_revenue=Sum("total_amount")
+
+        total_revenue = (
+            Order.objects.filter(payment_status="paid")
+            .aggregate(total=Sum("total_amount"))["total"] or 0
         )
-        total_revenue = revenue_data["total_revenue"] or 0
 
-        # Get recent orders
-        recent_orders = Order.objects.all().order_by("-created_at")[:5]
-        from orders.serializers import OrderSerializer
-        recent_orders_data = OrderSerializer(recent_orders, many=True).data
+        recent_orders = (
+            Order.objects.select_related("user")
+            .order_by("-created_at")[:5]
+        )
+        recent_orders_data = OrderDashboardSerializer(recent_orders, many=True).data
 
-        # Get category distribution
-        category_data = []
-        categories = Product.objects.values_list('category', flat=True).distinct()
-        for cat in categories:
-            count = Product.objects.filter(category=cat).count()
-            category_data.append({"name": cat, "count": count})
+        # Group products by category
+        category_stats = (
+            Product.objects.values("category")
+            .annotate(count=Count("id"))
+        )
+        category_data = [
+            {"name": item["category"], "count": item["count"]}
+            for item in category_stats
+        ]
 
-        # Get top products by stock (or sales if available, but stock for now)
-        # Actually, let's show low stock products as it's more useful for admin
-        low_stock_products = Product.objects.order_by("stock")[:5]
-        from products.serializers import ProductSerializer
-        low_stock_data = ProductSerializer(low_stock_products, many=True).data
+        low_stock = Product.objects.order_by("stock")[:5]
+        low_stock_data = ProductMiniSerializer(low_stock, many=True).data
 
         return Response({
             "total_users": total_users,
@@ -96,61 +116,53 @@ class DashboardStatsView(APIView):
         })
 
 
+# ================================
+# REPORTS
+# Revenue timeline, statuses, methods
+# ================================
 class AdminReportsView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        from orders.models import Order
-        from django.db.models import Sum, Count
-        from django.db.models.functions import TruncDate
+        paid = Order.objects.filter(payment_status="paid")
 
-        # Total Stats
         total_orders = Order.objects.count()
-        revenue_data = Order.objects.filter(payment_status="paid").aggregate(
-            total_revenue=Sum("total_amount")
-        )
-        total_revenue = revenue_data["total_revenue"] or 0
+        total_revenue = paid.aggregate(total=Sum("total_amount"))["total"] or 0
 
-        # Revenue Timeline (Group by Date)
-        timeline_data = (
-            Order.objects.filter(payment_status="paid")
-            .annotate(date=TruncDate("created_at"))
+        # Revenue grouped by date
+        timeline = (
+            paid.annotate(date=TruncDate("created_at"))
             .values("date")
             .annotate(total=Sum("total_amount"))
             .order_by("date")
         )
-        
         revenue_timeline = [
-            {"name": item["date"].strftime("%Y-%m-%d"), "total": item["total"]}
-            for item in timeline_data
+            {"name": item["date"].isoformat(), "total": item["total"]}
+            for item in timeline
         ]
 
-        # Payment Method Distribution
-        payment_counts = (
-            Order.objects.values("payment_method")
+        payment_dist = [
+            {
+                "name": (item["payment_method"] or "Unknown").upper(),
+                "count": item["count"],
+            }
+            for item in Order.objects.values("payment_method")
             .annotate(count=Count("id"))
-            .order_by("payment_method")
-        )
-        payment_distribution = [
-            {"name": item["payment_method"].upper(), "count": item["count"]}
-            for item in payment_counts
         ]
 
-        # Order Status Distribution
-        status_counts = (
-            Order.objects.values("order_status")
+        status_dist = [
+            {
+                "name": (item["order_status"] or "").title(),
+                "count": item["count"],
+            }
+            for item in Order.objects.values("order_status")
             .annotate(count=Count("id"))
-            .order_by("order_status")
-        )
-        status_distribution = [
-            {"name": item["order_status"].title(), "count": item["count"]}
-            for item in status_counts
         ]
 
         return Response({
             "total_orders": total_orders,
             "total_revenue": total_revenue,
             "revenue_timeline": revenue_timeline,
-            "payment_distribution": payment_distribution,
-            "status_distribution": status_distribution,
+            "payment_distribution": payment_dist,
+            "status_distribution": status_dist,
         })
