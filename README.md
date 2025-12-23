@@ -11,7 +11,7 @@
 
 **A production-ready infrastructure** featuring JWT authentication, Stripe payment integration, and cloud-optimized media storage.
 
-[Features](#-key-capabilities) • [Quick Start](#-getting-started) • [Deployment](#-deployment-ready) • [Tech Stack](#-technology-stack)
+[Features](#-key-capabilities) • [Deployment](#-deployment-ready) • [Tech Stack](#-technology-stack)
 
 </div>
 
@@ -20,67 +20,32 @@
 ## ✨ Key Capabilities
 
 ### 🔐 Security & Identity
+
 - **Next-Gen Auth**: Secure JWT via HttpOnly cookies with automatic token refresh.
 - **Social Integration**: Seamless Google OAuth integration for one-tap sign-in.
 - **Robust Protection**: Built-in rate limiting (registration/login) and CSRF/CORS security.
 - **Granular Control**: Staff-only permissions for product management and administrative tasks.
 
 ### 🛒 Commerce Core
+
 - **Advanced Catalog**: Full CRUD capabilities with high-performance search and filtering.
 - **Persistent Shopping**: Database-backed cart and wishlist that stays with the user across devices.
 - **Order Lifecycle**: Comprehensive order management from creation to final status tracking.
 - **Inventory Engine**: Real-time stock validation and automated inventory tracking.
 
 ### 💳 Payments & Media
+
 - **Stripe Checkout**: Native integration for secure, hosted card global payments.
 - **Flexible Options**: Support for both Cash on Delivery (COD) and Digital Payments.
 - **Cloud Media**: Direct integration with Cloudinary for fast, optimized image delivery via CDN.
 
 ---
 
-## 🚀 Getting Started
+## 📸 App Screenshots
 
-### Prerequisites
-- **Python** 3.11+
-- **PostgreSQL** 13+
-- **Cloudinary** & **Stripe** accounts
-
-### Setup Guide
-
-1. **Environment Setup**
-   ```bash
-   git clone <your-repo-url>
-   cd sBackend
-   python -m venv .venv
-   source .venv/bin/activate # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-2. **Configuration**
-   Create a `.env` file in the root directory:
-   ```env
-   SECRET_KEY=your_secret_key
-   DEBUG=True
-   ALLOWED_HOSTS=localhost,127.0.0.1
-   DATABASE_URL=postgresql://user:password@localhost:5432/souled_db
-   CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name
-   STRIPE_SECRET_KEY=sk_test_...
-   GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
-   ```
-
-3. **Initialize Database**
-   ```bash
-   python manage.py migrate
-   python manage.py createsuperuser
-   python manage.py import_products # Optional seeding
-   ```
-
-4. **Launch**
-   ```bash
-   python manage.py runserver
-   ```
-   > [!TIP]
-   > The API will be accessible at `http://localhost:8000`.
+| Home | Products |
+| :---: | :---: |
+| ![Home](screenshots/home.png) | ![Products](screenshots/products.png) |
 
 ---
 
