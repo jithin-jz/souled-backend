@@ -175,7 +175,7 @@ This project is licensed under the **MIT License**.
 
 <div align="center">
 
-**Built with ❤️ by [JITHIN](https://github.com/jithin-dev)**
+**Built with ❤️ by [JITHIN](https://github.com/jithin-jz)**
 
 If you found this helpful, give it a ⭐!
 
