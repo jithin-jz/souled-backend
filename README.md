@@ -120,7 +120,7 @@ This project is licensed under the **MIT License**.
 
 <br/>
 
-[![GitHub stars](https://img.shields.io/github/stars/jithin-jz/souled-sBackend?style=social)](https://github.com/jithin-jz/souled-sBackend)
-[![GitHub forks](https://img.shields.io/github/forks/jithin-jz/souled-sBackend?style=social)](https://github.com/jithin-jz/souled-sBackend/fork)
+[![GitHub stars](https://img.shields.io/github/stars/jithin-jz/souled-backend?style=social)](https://github.com/jithin-jz/souled-backend)
+[![GitHub forks](https://img.shields.io/github/forks/jithin-jz/souled-backend?style=social)](https://github.com/jithin-jz/souled-backend/fork)
 
 </div>
