@@ -67,4 +67,3 @@ jobs:
 
           # Cleanup
           rm -f private_key.pem
-    
