@@ -7,9 +7,6 @@ from .views import (
     LogoutView,
     MeView,
     RefreshView,
-    # ProfileUpdateView,
-    # NotificationListAPIView,
-    # MarkNotificationReadAPIView,
 )
 
 urlpatterns = [
@@ -19,7 +16,4 @@ urlpatterns = [
     path("google/", GoogleLoginView.as_view(), name="google_login"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("me/", MeView.as_view(), name="me"),
-    # path("update-profile/", ProfileUpdateView.as_view(), name="update_profile"),
-    # path("notifications/", NotificationListAPIView.as_view(), name="notification_list"),
-    # path("notifications/<int:pk>/read/", MarkNotificationReadAPIView.as_view(), name="notification_read"),
 ]
