@@ -1,4 +1,5 @@
 import os
+import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -18,6 +19,7 @@ from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
 
 User = get_user_model()
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+logger = logging.getLogger(__name__)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -130,10 +132,17 @@ class GoogleLoginView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        except Exception:
+        except ValueError as e:
+            logger.error(f"Google token validation failed: {e}")
             return Response(
                 {"detail": "Invalid Google token"},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            logger.exception(f"Unexpected error during Google login: {e}")
+            return Response(
+                {"detail": "Authentication failed. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
@@ -181,8 +190,12 @@ class RefreshView(APIView):
                 status=200
             )
 
-        except Exception:
+        except ValueError as e:
+            logger.error(f"Invalid refresh token: {e}")
             return Response({"detail": "Refresh token invalid"}, status=401)
+        except Exception as e:
+            logger.exception(f"Unexpected error during token refresh: {e}")
+            return Response({"detail": "Token refresh failed"}, status=500)
 
 
 class MeView(APIView):

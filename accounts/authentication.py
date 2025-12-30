@@ -1,6 +1,10 @@
 from django.conf import settings
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework import exceptions
+import logging
+
+logger = logging.getLogger(__name__)
 
 User = settings.AUTH_USER_MODEL
 
@@ -22,7 +26,11 @@ class CookieJWTAuthentication(JWTAuthentication):
 
         try:
             validated_token = self.get_validated_token(raw_token)
-        except Exception:
+        except (InvalidToken, TokenError) as e:
+            logger.warning(f"Invalid token during authentication: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error during token validation: {e}")
             return None
 
         user = self.get_user(validated_token)

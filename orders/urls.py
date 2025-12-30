@@ -6,6 +6,7 @@ from .views import (
     UserOrderListAPIView,
     AdminOrderListAPIView,
     UpdateOrderStatusAPIView,
+    CancelOrderAPIView,
 )
 from .address_views import (
     UserAddressListCreateView,
@@ -21,6 +22,9 @@ urlpatterns = [
     # Admin endpoints
     path("admin/all/", AdminOrderListAPIView.as_view(), name="admin-orders-list"),
     path("<int:order_id>/status/", UpdateOrderStatusAPIView.as_view(), name="update-order-status"),
+    
+    # User order management
+    path("<int:order_id>/cancel/", CancelOrderAPIView.as_view(), name="cancel-order"),
     
     # Address management
     path("addresses/", UserAddressListCreateView.as_view(), name="address-list-create"),

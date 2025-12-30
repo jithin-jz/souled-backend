@@ -7,7 +7,7 @@ from products.models import Product
 # CART
 # ============================
 class Cart(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -15,8 +15,8 @@ class Cart(models.Model):
 
 
 class CartItem(models.Model):
-    cart = models.ForeignKey(Cart, related_name="items", on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    cart = models.ForeignKey(Cart, related_name="items", on_delete=models.CASCADE, db_index=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, db_index=True)
     quantity = models.PositiveIntegerField(default=1)
 
     class Meta:
@@ -30,7 +30,7 @@ class CartItem(models.Model):
 # WISHLIST
 # ============================
 class Wishlist(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -38,8 +38,8 @@ class Wishlist(models.Model):
 
 
 class WishlistItem(models.Model):
-    wishlist = models.ForeignKey(Wishlist, related_name="items", on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    wishlist = models.ForeignKey(Wishlist, related_name="items", on_delete=models.CASCADE, db_index=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, db_index=True)
 
     class Meta:
         unique_together = ("wishlist", "product")

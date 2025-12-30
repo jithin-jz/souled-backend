@@ -61,7 +61,8 @@ class CreateOrderAPIView(APIView):
             total_amount = sum(
                 float(i["price"]) * int(i["quantity"]) for i in cart
             )
-        except Exception:
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Invalid cart format: {e}")
             return Response({"error": "Invalid cart format"}, status=400)
 
         # Use database transaction for data integrity
@@ -193,8 +194,12 @@ class VerifyPaymentAPIView(APIView):
         # Retrieve Stripe session
         try:
             session = stripe.checkout.Session.retrieve(session_id)
-        except Exception:
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error retrieving session: {e}")
             return Response({"error": "Invalid session_id"}, status=400)
+        except Exception as e:
+            logger.exception(f"Unexpected error verifying payment: {e}")
+            return Response({"error": "Payment verification failed"}, status=500)
 
         order_id = session.get("metadata", {}).get("order_id")
         if not order_id:
@@ -338,3 +343,56 @@ class UpdateOrderStatusAPIView(APIView):
             "message": "Order updated successfully",
             "order": serializer.data
         }, status=200)
+
+
+# ======================================================================
+# CANCEL ORDER
+# ======================================================================
+class CancelOrderAPIView(APIView):
+    """
+    Allow user to cancel their order (only if status is 'processing')
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id):
+        try:
+            order = Order.objects.select_related('user').prefetch_related('items__product').get(
+                id=order_id, 
+                user=request.user
+            )
+        except Order.DoesNotExist:
+            return Response({"error": "Order not found"}, status=404)
+
+        # Only allow cancellation if order is still processing
+        if order.order_status != 'processing':
+            return Response(
+                {"error": f"Cannot cancel order with status '{order.order_status}'. Only 'processing' orders can be cancelled."},
+                status=400
+            )
+
+        # Use transaction to ensure data integrity
+        try:
+            with transaction.atomic():
+                # Restore stock for all items in the order
+                for item in order.items.all():
+                    if item.product:
+                        product = Product.objects.select_for_update().get(id=item.product.id)
+                        product.stock += item.quantity
+                        product.save()
+                        logger.info(f"Stock restored for {product.name}: +{item.quantity} units (Order #{order.id} cancelled)")
+
+                # Update order status
+                order.order_status = 'cancelled'
+                order.save()
+
+                logger.info(f"Order {order.id} cancelled by user {request.user.email}")
+
+                return Response({
+                    "message": "Order cancelled successfully",
+                    "order_id": order.id,
+                    "refund_info": "Your refund will be processed within 5-7 business days" if order.payment_status == 'paid' else None
+                }, status=200)
+
+        except Exception as e:
+            logger.error(f"Error cancelling order {order_id}: {str(e)}")
+            return Response({"error": "Failed to cancel order. Please try again."}, status=500)
